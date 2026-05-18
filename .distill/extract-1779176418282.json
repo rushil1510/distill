@@ -1,0 +1,23 @@
+{
+  "created": [
+    {
+      "path": "/var/folders/b_/x_vkn4y106l3yyg5l09ph8600000gn/T/distill-test-LgdeP3/src/calculateTax.ts",
+      "functionName": "calculateTax",
+      "content": "export interface Item { price: number; }\n\nexport const TAX_RATE = 0.2;\n\nexport function calculateTax(item: Item) {\n  return item.price * TAX_RATE;\n}\n"
+    }
+  ],
+  "modified": [
+    {
+      "path": "/var/folders/b_/x_vkn4y106l3yyg5l09ph8600000gn/T/distill-test-LgdeP3/src/utils.ts",
+      "originalContent": "\nexport const TAX_RATE = 0.2;\n\nexport interface Item { price: number; }\n\nexport function calculateTax(item: Item) {\n  return item.price * TAX_RATE;\n}\n\nexport function formatPrice(price: number) {\n  return '$' + price.toFixed(2);\n}\n    ",
+      "newContent": "import { calculateTax } from \"./calculateTax\";\n\nexport const TAX_RATE = 0.2;\n\nexport interface Item { price: number; }\n\nexport function formatPrice(price: number) {\n  return '$' + price.toFixed(2);\n}\n\nexport { calculateTax } from \"./calculateTax\";\n    "
+    },
+    {
+      "path": "/var/folders/b_/x_vkn4y106l3yyg5l09ph8600000gn/T/distill-test-LgdeP3/src/consumer.ts",
+      "originalContent": "\nimport { calculateTax, formatPrice, Item } from './utils';\n\nconst item: Item = { price: 100 };\nconsole.log(formatPrice(calculateTax(item)));\n    ",
+      "newContent": "\nimport { formatPrice, Item } from './utils';\nimport { calculateTax } from \"./calculateTax\";\n\nconst item: Item = { price: 100 };\nconsole.log(formatPrice(calculateTax(item)));\n    "
+    }
+  ],
+  "warnings": [],
+  "dryRun": false
+}
