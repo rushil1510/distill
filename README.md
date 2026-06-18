@@ -2,9 +2,7 @@
   <h1>Distill</h1>
   <p><strong>A token-efficient code modularization tool for AI agents and humans.</strong></p>
   <p>
-    <a href="https://github.com/rushil1510/distill/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen" alt="Build Status" /></a>
-    <a href="https://www.npmjs.com/package/distill-js"><img src="https://img.shields.io/npm/v/distill-js.svg" alt="npm version" /></a>
-    <a href="https://github.com/rushil1510/distill/blob/master/LICENSE"><img src="https://img.shields.io/npm/l/distill-js.svg" alt="License" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   </p>
 </div>
 
@@ -26,12 +24,20 @@ Built natively on [ts-morph](https://ts-morph.com/), it perfectly understands yo
 
 ## Installation
 
-```bash
-# Install globally
-npm install -g distill-js
+Distill isn't published to a package registry — clone the repo and build it from source:
 
-# Or run instantly via npx
-npx distill-js --help
+```bash
+git clone https://github.com/rushil1510/distill.git
+cd distill
+npm install
+npm run build
+
+# Run the CLI directly...
+node bin/distill.js --help
+
+# ...or link it so `distill` is available globally on your machine
+npm link
+distill --help
 ```
 
 ## Quick Start
@@ -99,14 +105,14 @@ Distill works out of the box, but you can configure it by creating a `distill.co
 Distill ships with a built-in Model Context Protocol (MCP) server, allowing you to directly give AI agents the ability to analyze and refactor your codebase. It exposes three tools: `distill_analyze` (list extractable functions), `distill_suggest` (recommend god-file splits), and `distill_extract` (perform the safe, validated extraction).
 
 **Usage with Claude Desktop:**
-Add the following to your `claude_desktop_config.json`:
+After building from source, point `claude_desktop_config.json` at the local MCP entrypoint (use the absolute path to your clone):
 
 ```json
 {
   "mcpServers": {
     "distill": {
-      "command": "npx",
-      "args": ["-y", "distill-js", "mcp"]
+      "command": "node",
+      "args": ["/absolute/path/to/distill/bin/mcp.js"]
     }
   }
 }
@@ -120,4 +126,4 @@ For details into the project's architecture and contribution guidelines, see:
 
 ## License
 
-MIT (c) [Rushil Mital](https://github.com/rushil1510)
+[MIT](LICENSE) © [Rushil Mital](https://github.com/rushil1510)
