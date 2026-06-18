@@ -55,7 +55,7 @@ When `distill extract` is invoked, the `extractor.ts` orchestrator runs the foll
 
 ### 2. Pre-Computation Phase
 - The engine pre-computes the exact content of the new files in memory.
-- `inFileDeps` are modified on the fly to ensure they have the `export` keyword so they can be consumed by the newly created file and the original file.
+- `inFileDeps` are modified on the fly to ensure they have the `export` keyword so they can be consumed by the newly created file and the original file. The `export` keyword is inserted **after** any leading comments / JSDoc on the declaration (and is skipped entirely if the symbol is already exported), so commented symbols aren't corrupted into invalid `export // comment` output.
 - New file paths are generated based on the selected `NamingConvention`.
 
 ### 3. Mutation Phase
@@ -70,8 +70,9 @@ When `distill extract` is invoked, the `extractor.ts` orchestrator runs the foll
 
 ### 5. Validation & Rollback
 - Writes the mutated ASTs and new files to the physical file system.
-- Spawns a synchronous `npx tsc --noEmit --project tsconfig.json` child process.
-- **Rollback:** If TypeScript reports *any* compilation errors, Distill immediately deletes the new files and restores the original file contents from memory, ensuring zero destructive risk to the codebase.
+- Spawns a synchronous `tsc --noEmit --project tsconfig.json` child process, preferring the project's locally-installed `node_modules/.bin/tsc` and only falling back to `npx --no-install` so an unrelated `tsc` on the PATH is never run by accident.
+- **Rollback:** If TypeScript reports real type errors (`error TS####`), Distill immediately deletes the new files and restores the original file contents from memory, ensuring zero destructive risk to the codebase.
+- **Tooling-unavailable vs. type error:** If `tsc` cannot be executed at all (e.g. TypeScript isn't installed in the target project), that is **not** treated as a compilation failure. Silently rolling back would discard a perfectly valid extraction, so Distill keeps the change and emits a loud warning instead, telling the user to install `typescript` or re-run with `--no-validate`.
 - Finally, it drops a `.distill/extract-<timestamp>.json` manifest for future undo/cleanup support.
 
 ## Design Decisions

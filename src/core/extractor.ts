@@ -124,11 +124,9 @@ export async function extract(
 
     if (validate) {
       logger.info('Validating with TypeScript...');
-      try {
-        const cmd = `npx tsc --noEmit --project ${config.tsconfig}`;
-        execSync(cmd, { stdio: 'ignore' });
-        logger.success('Validation passed.');
-      } catch (err) {
+      const verdict = validateWithTypeScript(config.tsconfig);
+
+      if (verdict.status === 'failed') {
         logger.error('TypeScript validation failed! Rolling back changes...');
         for (const created of result.created) {
           if (fs.existsSync(created.path)) fs.unlinkSync(created.path);
@@ -137,6 +135,21 @@ export async function extract(
           fs.writeFileSync(modified.path, modified.originalContent, 'utf-8');
         }
         throw new Error('Extraction resulted in TypeScript errors. Rolled back.');
+      }
+
+      if (verdict.status === 'unavailable') {
+        // tsc could not be executed at all (e.g. typescript not installed in the
+        // target project). This is NOT a type error — silently rolling back would
+        // discard a valid extraction. Keep the change but warn loudly.
+        const msg =
+          'Could not run TypeScript validation — tsc is unavailable in this project. ' +
+          'Changes were KEPT WITHOUT validation. Install typescript (npm i -D typescript) ' +
+          'or re-run with --no-validate to silence this.';
+        logger.warn(msg);
+        if (verdict.reason) logger.debug(`tsc: ${verdict.reason}`);
+        result.warnings.push(msg);
+      } else {
+        logger.success('Validation passed.');
       }
     }
 
@@ -154,6 +167,56 @@ export async function extract(
   }
 
   return result;
+}
+
+/** Outcome of the post-extraction TypeScript validation pass. */
+type ValidationVerdict =
+  | { status: 'passed' }
+  | { status: 'failed'; reason: string }
+  | { status: 'unavailable'; reason: string };
+
+/**
+ * Run `tsc --noEmit` against the project and classify the outcome.
+ *
+ * Crucially, this distinguishes two very different failure modes that the old
+ * implementation conflated:
+ *   - `failed`      → tsc ran and reported real type errors (rollback is correct).
+ *   - `unavailable` → tsc could not be executed at all (typescript not installed,
+ *                     npx couldn't resolve a real tsc, etc). Treating this as a
+ *                     type error silently discards valid extractions.
+ *
+ * We prefer the project's locally-installed `node_modules/.bin/tsc` and only fall
+ * back to `npx --no-install` so we never accidentally run an unrelated binary.
+ */
+function validateWithTypeScript(tsconfigPath: string): ValidationVerdict {
+  const cwd = process.cwd();
+  const localTsc = path.join(
+    cwd,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'tsc.cmd' : 'tsc'
+  );
+  const tscCmd = fs.existsSync(localTsc)
+    ? JSON.stringify(localTsc)
+    : 'npx --no-install tsc';
+  const cmd = `${tscCmd} --noEmit --project ${JSON.stringify(tsconfigPath)}`;
+
+  try {
+    execSync(cmd, { cwd, stdio: 'pipe' });
+    return { status: 'passed' };
+  } catch (err: any) {
+    const output = `${err?.stdout ?? ''}${err?.stderr ?? ''}`.toString();
+    // Genuine type errors are emitted as "path.ts(1,2): error TS1234: ...".
+    if (/error TS\d+/.test(output)) {
+      return { status: 'failed', reason: output.trim() };
+    }
+    // Anything else means tsc never really ran (missing binary, bad project path,
+    // npx resolution failure). Don't pretend it was a type error.
+    return {
+      status: 'unavailable',
+      reason: (output.trim() || err?.message || 'tsc could not be executed').slice(0, 500),
+    };
+  }
 }
 
 /** Filter functions to the ones the user wants to extract. */
@@ -183,22 +246,51 @@ function buildNewFileContent(
   if (deps.requiredImports.length > 0) lines.push('');
 
   for (const dep of deps.inFileDeps) {
-    let text = dep.declarationText;
-    if (!text.startsWith('export ') && !text.startsWith('export\n')) {
-      text = 'export ' + text;
-    }
-    lines.push(text);
+    lines.push(ensureExported(dep.declarationText));
     lines.push('');
   }
 
   const funcNode = findNode(sourceFile, target.name);
   if (funcNode) {
-    let funcText = funcNode.getFullText().trim();
-    if (!target.isExported) funcText = 'export ' + funcText;
-    lines.push(funcText);
+    lines.push(ensureExported(funcNode.getFullText().trim()));
     lines.push('');
   }
 
+  return lines.join('\n');
+}
+
+/**
+ * Ensure a top-level declaration is exported, without corrupting it.
+ *
+ * `declarationText` may carry leading comments / JSDoc (from `getFullText()`),
+ * so we can't just prepend `export ` — that would produce `export // comment\n
+ * const foo`, a syntax error. Instead we find the first non-trivia line (the
+ * actual declaration) and only insert `export ` there if it isn't already
+ * exported. Idempotent: a declaration that already says `export`/`export default`
+ * is returned unchanged.
+ */
+export function ensureExported(text: string): string {
+  const lines = text.split('\n');
+  const isTrivia = (l: string): boolean => {
+    const t = l.trim();
+    return (
+      t === '' ||
+      t.startsWith('//') ||
+      t.startsWith('/*') ||
+      t.startsWith('*') ||
+      t.endsWith('*/')
+    );
+  };
+
+  let i = 0;
+  while (i < lines.length && isTrivia(lines[i])) i++;
+  if (i >= lines.length) return text; // no declaration found; leave as-is
+
+  const decl = lines[i].trimStart();
+  if (decl.startsWith('export ') || decl.startsWith('export\t')) return text;
+
+  const indent = lines[i].slice(0, lines[i].length - decl.length);
+  lines[i] = indent + 'export ' + decl;
   return lines.join('\n');
 }
 
