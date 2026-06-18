@@ -87,6 +87,49 @@ server.tool(
   }
 );
 
+// Tool: suggest
+server.tool(
+  'distill_suggest',
+  'Recommend how to split god-files into single-responsibility modules. ' +
+    'Omit filePath to scan the whole project and rank the worst offenders; ' +
+    'pass a filePath to get the split plan (independent symbol clusters) for one file. ' +
+    'Pair this with distill_extract to execute an accepted suggestion.',
+  {
+    filePath: z
+      .string()
+      .optional()
+      .describe('Absolute path to a single file. Omit to scan the whole project.'),
+    top: z
+      .number()
+      .optional()
+      .describe('When scanning a project, return only the N worst files'),
+  },
+  async ({ filePath, top }) => {
+    try {
+      if (filePath) {
+        const suggestion = distill.suggest(filePath);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(suggestion, null, 2) }],
+        };
+      }
+
+      let suggestions = distill
+        .suggestProject()
+        .filter((s) => s.clusterCount >= 2);
+      if (top !== undefined) suggestions = suggestions.slice(0, top);
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(suggestions, null, 2) }],
+      };
+    } catch (err: any) {
+      return {
+        content: [{ type: 'text', text: `Error: ${err.message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // Start the server using stdio transport
 async function start() {
   const transport = new StdioServerTransport();

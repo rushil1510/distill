@@ -17,6 +17,7 @@ Built natively on [ts-morph](https://ts-morph.com/), it perfectly understands yo
 ## Features
 
 - **AST-Powered:** Perfect parsing of TypeScript and JSX/TSX.
+- **God-File Detection:** `distill suggest` ranks your worst files and proposes how to split them — it clusters each file's symbols into independent "responsibility" groups (via union-find connected components over the real ts-morph reference graph) and hands you a ready-to-run `extract` command.
 - **Transitive Dependency Tracking:** Automatically co-extracts interfaces, constants, and helper functions required by your target function.
 - **Global Import Rewriting:** Rewires all consumers of your function across the entire project to point to the new file path.
 - **Safe Auto-Rollback:** Automatically runs `tsc --noEmit` post-extraction. If compilation fails, it surgically rolls back all changes.
@@ -42,14 +43,37 @@ Find all extractable functions in a large utility file:
 distill analyze src/utils.ts
 ```
 
-### 2. Extract a function
-Extract a specific function into its own module. Distill will create the new file, co-extract dependencies, remove it from the original file, and rewrite all imports project-wide.
+### 2. Find what to split (and how)
+Don't know which file is the worst offender, or how to break it apart? Let Distill recommend a plan. Run it over a single file, or omit the path to scan and rank the whole project:
+
+```bash
+# Plan a split for one file
+distill suggest src/utils.ts
+
+# Scan the project and rank the worst god-files
+distill suggest --top 5
+```
+
+Each suggested cluster is an independent group of symbols you can pull into its own module:
+
+```text
+src/utils.ts  (420 lines · 18 symbols · 4 clusters · fan-in 9 · fan-out 3)  score 1287
+   1. calculateTax  (62 lines) [public]
+      TAX_RATE, TaxResult, calculateTax, validateAmount
+   2. formatPrice  (...)   ...
+   → distill extract src/utils.ts --function TAX_RATE TaxResult calculateTax validateAmount
+```
+
+The score (`lines × (clusters − 1) + coupling`) ranks files that are both large *and* made of independent pieces — the ones most worth breaking up. Add `--json` for programmatic output.
+
+### 3. Extract a function
+Extract a specific function (or an accepted suggestion) into its own module. Distill will create the new file, co-extract dependencies, remove it from the original file, and rewrite all imports project-wide.
 
 ```bash
 distill extract src/utils.ts --function calculateTax --outdir src/helpers
 ```
 
-### 3. Preview without modifying
+### 4. Preview without modifying
 View what will happen before touching your files:
 
 ```bash
@@ -72,7 +96,7 @@ Distill works out of the box, but you can configure it by creating a `distill.co
 
 ## MCP Tool Server
 
-Distill ships with a built-in Model Context Protocol (MCP) server, allowing you to directly give AI agents the ability to analyze and refactor your codebase.
+Distill ships with a built-in Model Context Protocol (MCP) server, allowing you to directly give AI agents the ability to analyze and refactor your codebase. It exposes three tools: `distill_analyze` (list extractable functions), `distill_suggest` (recommend god-file splits), and `distill_extract` (perform the safe, validated extraction).
 
 **Usage with Claude Desktop:**
 Add the following to your `claude_desktop_config.json`:

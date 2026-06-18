@@ -24,6 +24,13 @@ import { extract } from './core/extractor';
 import { analyzeFunctions } from './core/analyzer';
 import { analyzeDependencies } from './core/dependency-analyzer';
 import { getProject, getSourceFile, clearCache } from './core/parser';
+import { buildSymbolGraph } from './core/symbol-graph';
+import { clusterSymbols } from './core/clusterer';
+import {
+  suggestForFile,
+  suggestForProject,
+  fanInForFile,
+} from './core/suggester';
 import { loadConfig } from './utils/config';
 import { toFileName } from './core/naming';
 import * as path from 'path';
@@ -33,6 +40,11 @@ import type {
   FunctionInfo,
   DependencyReport,
   DistillConfig,
+  SymbolCluster,
+  FileSuggestion,
+  FileSymbol,
+  SymbolGraph,
+  SymbolKind,
 } from './types';
 
 /**
@@ -73,6 +85,43 @@ export const distill = {
     return analyzeDependencies(sourceFile, functionName);
   },
 
+  /**
+   * Cluster a file's top-level symbols into independent responsibility
+   * groups. Each cluster is a candidate module to extract.
+   */
+  cluster(filePath: string, tsconfigPath?: string): SymbolCluster[] {
+    const config = loadConfig(tsconfigPath ? { tsconfig: tsconfigPath } : {});
+    const project = getProject(config.tsconfig);
+    const sourceFile = getSourceFile(project, path.resolve(filePath));
+    return clusterSymbols(buildSymbolGraph(sourceFile), config.naming);
+  },
+
+  /**
+   * Suggest how to split a single file: clusters, coupling, and god-file
+   * score. Does not modify any files.
+   */
+  suggest(filePath: string, tsconfigPath?: string): FileSuggestion {
+    const config = loadConfig(tsconfigPath ? { tsconfig: tsconfigPath } : {});
+    const project = getProject(config.tsconfig);
+    const absolutePath = path.resolve(filePath);
+    const sourceFile = getSourceFile(project, absolutePath);
+    const fanIn = fanInForFile(project, absolutePath);
+    return suggestForFile(sourceFile, { naming: config.naming, fanIn });
+  },
+
+  /**
+   * Scan a whole project and return per-file split suggestions ranked
+   * worst-first.
+   */
+  suggestProject(tsconfigPath?: string): FileSuggestion[] {
+    const config = loadConfig(tsconfigPath ? { tsconfig: tsconfigPath } : {});
+    const project = getProject(config.tsconfig);
+    return suggestForProject(project, {
+      naming: config.naming,
+      exclude: config.exclude,
+    });
+  },
+
   /** Clear the internal project cache. */
   clearCache,
 };
@@ -84,4 +133,9 @@ export type {
   FunctionInfo,
   DependencyReport,
   DistillConfig,
+  SymbolCluster,
+  FileSuggestion,
+  FileSymbol,
+  SymbolGraph,
+  SymbolKind,
 };
