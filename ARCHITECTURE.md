@@ -18,6 +18,9 @@ src/
 │   ├── parser.ts           # ts-morph project initialization & caching
 │   ├── analyzer.ts         # Identifies extractable functions in a file
 │   ├── dependency-analyzer # AST walking for transitive dependency graphs
+│   ├── symbol-graph.ts     # Intra-file symbol reference graph (all top-level symbols)
+│   ├── clusterer.ts        # Union-find connected components → responsibility clusters
+│   ├── suggester.ts        # God-file scoring + ranking (the `suggest` engine)
 │   ├── extractor.ts        # The main orchestrator
 │   ├── import-rewriter.ts  # Project-wide import updates
 │   └── naming.ts           # File naming conventions (camelCase, etc.)
@@ -25,6 +28,16 @@ src/
     ├── config.ts           # cosmiconfig resolution
     └── logger.ts           # Console formatting
 ```
+
+## The Suggestion Pipeline
+
+`distill extract` answers *"extract this function safely."* `distill suggest` answers the question that comes before it: *"what should I extract, and from where?"*
+
+1. **Symbol graph (`symbol-graph.ts`):** For a file, enumerate every top-level symbol (functions, variables, types, interfaces, enums, classes) and draw an edge from A to B whenever A's declaration references B. It reuses the dependency-analyzer's exact reference-collection helpers, so edges share the same semantics the extraction pipeline already trusts. Imports and locally-scoped parameter names are excluded.
+2. **Clustering (`clusterer.ts`):** Run union-find connected-components over that graph (treating edges as undirected). Each connected component is a group of symbols that belong together but are independent of the rest of the file — a candidate module. Clusters are returned largest-first.
+3. **Scoring (`suggester.ts`):** Rank files by `lineCount × (clusterCount − 1) + (fanIn + fanOut)`. The dominant term surfaces files that are both large *and* fragmented; coupling (computed via real `getModuleSpecifierSourceFile()` resolution, not string matching) breaks ties. A cohesive single-cluster file scores its coupling only and won't be recommended for splitting.
+
+The output is a per-file plan that maps directly onto the existing `extract` command, completing the **find the mess → propose the split → execute it safely** loop.
 
 ## The Extraction Pipeline
 

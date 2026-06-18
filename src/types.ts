@@ -140,6 +140,109 @@ export interface DependencyReport {
   requiredImports: RequiredImport[];
 }
 
+// ─── Symbol Graph & Clustering ──────────────────────────────────────
+
+/** The kind of a top-level symbol declared in a file. */
+export type SymbolKind =
+  | 'function'
+  | 'variable'
+  | 'type'
+  | 'interface'
+  | 'enum'
+  | 'class';
+
+/** A single top-level symbol declared in a file. */
+export interface FileSymbol {
+  /** The symbol's identifier name. */
+  name: string;
+
+  /** What kind of declaration it is. */
+  kind: SymbolKind;
+
+  /** Whether it's exported from the file. */
+  isExported: boolean;
+
+  /** Starting line of the declaration (1-indexed). */
+  startLine: number;
+
+  /** Ending line of the declaration (1-indexed). */
+  endLine: number;
+
+  /** Total line count of the declaration. */
+  lineCount: number;
+}
+
+/**
+ * An intra-file symbol dependency graph: which top-level symbols
+ * reference which other top-level symbols in the same file.
+ */
+export interface SymbolGraph {
+  /** All top-level symbols, keyed by name. */
+  symbols: Map<string, FileSymbol>;
+
+  /**
+   * Adjacency map: symbol name → set of other in-file symbol names it
+   * references. Edges are stored as directed (referencer → referenced)
+   * but clustering treats them as undirected.
+   */
+  edges: Map<string, Set<string>>;
+}
+
+/**
+ * A connected component of the symbol graph — a group of symbols that
+ * reference each other (directly or transitively) but are independent
+ * of symbols in other clusters. Each cluster is a candidate module.
+ */
+export interface SymbolCluster {
+  /** Symbol names belonging to this cluster. */
+  symbols: string[];
+
+  /** Total lines spanned by this cluster's declarations. */
+  lineCount: number;
+
+  /** Whether any symbol in the cluster is exported (part of the file's API). */
+  hasExportedSymbol: boolean;
+
+  /**
+   * Suggested module file name (stem only, no extension), derived from the
+   * cluster's most prominent symbol via the configured naming convention.
+   */
+  suggestedName: string;
+}
+
+/**
+ * A ranked refactor suggestion for a single file: how bad a god-file it is
+ * and how it could be split into independent modules.
+ */
+export interface FileSuggestion {
+  /** Absolute path to the file. */
+  filePath: string;
+
+  /** Total line count of the file. */
+  lineCount: number;
+
+  /** Number of top-level symbols in the file. */
+  symbolCount: number;
+
+  /** Independent clusters (candidate modules) found in the file. */
+  clusters: SymbolCluster[];
+
+  /** Number of independent clusters (candidate modules). */
+  clusterCount: number;
+
+  /** How many other files in the project import from this file. */
+  fanIn: number;
+
+  /** How many distinct modules this file imports from. */
+  fanOut: number;
+
+  /**
+   * Heuristic priority score (higher = worse god-file / better split
+   * candidate). Driven by line count and independent-cluster count.
+   */
+  score: number;
+}
+
 // ─── Extraction Results ─────────────────────────────────────────────
 
 /** Describes a single file that was created during extraction. */

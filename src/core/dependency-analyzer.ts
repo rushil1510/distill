@@ -132,8 +132,11 @@ function expandTransitiveDependencies(
 
 /**
  * Find the AST node defining a given name.
+ *
+ * Exported so the symbol-graph builder can reuse the exact same
+ * name→declaration resolution used by the extraction pipeline.
  */
-function findNodeForName(sourceFile: SourceFile, name: string): Node | undefined {
+export function findNodeForName(sourceFile: SourceFile, name: string): Node | undefined {
   const func = sourceFile.getFunction(name);
   if (func) return func;
 
@@ -158,8 +161,11 @@ function findNodeForName(sourceFile: SourceFile, name: string): Node | undefined
 /**
  * Walk the function's AST and collect every Identifier that's referenced.
  * We then check which of these are defined elsewhere in the file vs. imported.
+ *
+ * Exported for reuse by the symbol-graph builder, which needs the same
+ * reference-collection semantics to draw edges between in-file symbols.
  */
-function collectReferencedIdentifiers(node: Node): Set<string> {
+export function collectReferencedIdentifiers(node: Node): Set<string> {
   const names = new Set<string>();
 
   node.forEachDescendant((child) => {
@@ -203,8 +209,11 @@ function isInsideImportDeclaration(node: Node): boolean {
 /**
  * Remove function parameter names from the referenced set.
  * Parameters are locally scoped - they don't need to be imported.
+ *
+ * Exported so the symbol-graph builder can strip locally-scoped
+ * parameter names before drawing edges between in-file symbols.
  */
-function removeParameterNames(node: Node, names: Set<string>): void {
+export function removeParameterNames(node: Node, names: Set<string>): void {
   // For FunctionDeclaration: get parameters directly
   if (node.getKind() === SyntaxKind.FunctionDeclaration) {
     const funcDecl = node as FunctionDeclaration;

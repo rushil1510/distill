@@ -11,6 +11,7 @@
 import { Command } from 'commander';
 import { runAnalyze } from './commands/analyze';
 import { runExtract } from './commands/extract';
+import { runSuggest } from './commands/suggest';
 import { setVerbose } from './utils/logger';
 
 const pkg = require('../package.json');
@@ -34,6 +35,22 @@ program
   .option('--json', 'Output results as JSON')
   .action((file: string, opts: any) => {
     runAnalyze(file, opts);
+  });
+
+// ── suggest command ─────────────────────────────────────────────────
+program
+  .command('suggest [path]')
+  .description(
+    'Find the worst god-files and propose how to split them into modules.\n' +
+    'Omit <path> to scan the whole project; pass a file to plan its split.'
+  )
+  .option('--top <n>', 'Show only the N worst files (project scan)', parseInt)
+  .option('--min-lines <n>', 'Ignore files smaller than N lines', parseInt)
+  .option('--min-clusters <n>', 'Only show files with at least N clusters (default 2)', parseInt)
+  .option('--naming <convention>', 'Suggested file naming: camelCase, kebab-case, PascalCase')
+  .option('--json', 'Output results as JSON')
+  .action((targetPath: string | undefined, opts: any) => {
+    runSuggest(targetPath, opts);
   });
 
 // ── extract command ─────────────────────────────────────────────────
